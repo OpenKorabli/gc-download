@@ -1,0 +1,35 @@
+[package]
+name = "gc-download"
+version = "0.1.1"
+description = "Download and extract game files from Wargaming Game Center (WGC) and Lesta Game Center (LGC)"
+edition = "2021"
+license = "GPL-3.0-only"
+authors = ["OpenKorabli contributors"]
+homepage = "https://github.com/OpenKorabli/gc-download"
+repository = "https://github.com/OpenKorabli/gc-download"
+readme = "README.md"
+keywords = ["wargaming", "lesta", "game-center", "wgc", "lgc"]
+categories = ["command-line-utilities", "network-programming"]
+
+[[bin]]
+name = "gc-download"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+ureq = "3"
+sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+roxmltree = "0.21"
+anyhow = "1"
+thiserror = "2"
+indicatif = "0.17"
+crc32fast = "1"
+log = "0.4"
+env_logger = "0.11"
+url = "2"
+glob-match = "0.2"
