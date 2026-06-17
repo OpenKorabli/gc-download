@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
-use gc_download::api::{apply_mirror, fetch_showroom, get_manifest, resolve_game};
+use gc_download::api::{fetch_showroom, get_manifest, resolve_game};
 use gc_download::remote_file::RemoteFile;
 use gc_download::sevenz::{extract_entry, parse_archive_index};
 use gc_download::types::{Backend, FileEntry};
@@ -94,25 +94,25 @@ fn fmt_size(n: u64) -> String {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let mirror_host = match &cli.mirror {
-        Some(name) => Some(cli.backend.resolve_mirror(name).map_err(|e| anyhow::anyhow!("{}", e))?),
-        None => None,
-    };
+    if let Some(ref name) = cli.mirror {
+        cli.backend.resolve_mirror(name).map_err(|e| anyhow::anyhow!("{}", e))?;
+    }
+    let mirror = cli.mirror.as_deref();
 
     match cli.command {
-        Commands::Games => cmd_games(cli.backend).await,
-        Commands::List { game, files, .. } => cmd_list(cli.backend, &game, files.as_deref()).await,
+        Commands::Games => cmd_games(cli.backend, mirror).await,
+        Commands::List { game, files, .. } => cmd_list(cli.backend, &game, files.as_deref(), mirror).await,
         Commands::Download { game, part, filename, output, dir, all } => {
-            cmd_download(cli.backend, &game, &part, filename.as_deref(), output.as_deref(), dir.as_deref(), all, mirror_host).await
+            cmd_download(cli.backend, &game, &part, filename.as_deref(), output.as_deref(), dir.as_deref(), all, mirror).await
         }
         Commands::Extract { game, part, paths, dir, list: do_list, filter } => {
-            cmd_extract(cli.backend, &game, &part, &paths, &dir, do_list, filter.as_deref(), mirror_host).await
+            cmd_extract(cli.backend, &game, &part, &paths, &dir, do_list, filter.as_deref(), mirror).await
         }
     }
 }
 
-async fn cmd_games(backend: Backend) -> anyhow::Result<()> {
-    let games = fetch_showroom(backend).await?;
+async fn cmd_games(backend: Backend, mirror: Option<&str>) -> anyhow::Result<()> {
+    let games = fetch_showroom(backend, mirror).await?;
     println!("Available games:\n");
     for g in &games {
         println!("  {:<25} {:<25} {}", g.app_id, g.game_name, g.region_name);
@@ -120,8 +120,8 @@ async fn cmd_games(backend: Backend) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cmd_list(backend: Backend, game_id: &str, files_part: Option<&str>) -> anyhow::Result<()> {
-    let game = resolve_game(backend, game_id).await?;
+async fn cmd_list(backend: Backend, game_id: &str, files_part: Option<&str>, mirror: Option<&str>) -> anyhow::Result<()> {
+    let game = resolve_game(backend, game_id, mirror).await?;
     let manifest = get_manifest(backend, &game.api_base, &game.app_id).await?;
 
     if let Some(part_name) = files_part {
@@ -169,9 +169,9 @@ async fn cmd_download(
     output: Option<&str>,
     dir: Option<&str>,
     all: bool,
-    mirror_host: Option<&str>,
+    mirror: Option<&str>,
 ) -> anyhow::Result<()> {
-    let game = resolve_game(backend, game_id).await?;
+    let game = resolve_game(backend, game_id, mirror).await?;
     let manifest = get_manifest(backend, &game.api_base, &game.app_id).await?;
 
     let part = manifest
@@ -183,7 +183,7 @@ async fn cmd_download(
         let out_dir = dir.unwrap_or(".");
         tokio::fs::create_dir_all(out_dir).await?;
         for f in &part.files {
-            download_file(f, &Path::new(out_dir).join(&f.basename), mirror_host).await?;
+            download_file(f, &Path::new(out_dir).join(&f.basename)).await?;
         }
     } else {
         let fname = filename.ok_or_else(|| anyhow::anyhow!("Specify a FILENAME or use --all"))?;
@@ -196,17 +196,13 @@ async fn cmd_download(
                 anyhow::anyhow!("File '{}' not found. Available: {:?}", fname, files)
             })?;
         let target = output.map(|o| o.to_string()).unwrap_or_else(|| match_file.basename.clone());
-        download_file(match_file, Path::new(&target), mirror_host).await?;
+        download_file(match_file, Path::new(&target)).await?;
     }
     Ok(())
 }
 
-async fn download_file(file: &FileEntry, target: &Path, mirror_host: Option<&str>) -> anyhow::Result<()> {
+async fn download_file(file: &FileEntry, target: &Path) -> anyhow::Result<()> {
     let url = file.download_url.as_deref().ok_or_else(|| anyhow::anyhow!("No download URL for {}", file.basename))?;
-    let url = match mirror_host {
-        Some(host) => apply_mirror(url, host),
-        None => url.to_string(),
-    };
     let expected = file.size;
 
     if target.exists() && target.metadata().map(|m| m.len() == expected).unwrap_or(false) {
@@ -219,7 +215,7 @@ async fn download_file(file: &FileEntry, target: &Path, mirror_host: Option<&str
         .user_agent("gc-download/0.1.0")
         .build()?;
 
-    let resp = client.get(&url).send().await?;
+    let resp = client.get(url).send().await?;
     let total = resp.content_length().unwrap_or(expected);
 
     let pb = ProgressBar::new(total);
@@ -252,9 +248,9 @@ async fn cmd_extract(
     out_dir: &str,
     do_list: bool,
     filter: Option<&str>,
-    mirror_host: Option<&str>,
+    mirror: Option<&str>,
 ) -> anyhow::Result<()> {
-    let game = resolve_game(backend, game_id).await?;
+    let game = resolve_game(backend, game_id, mirror).await?;
     let manifest = get_manifest(backend, &game.api_base, &game.app_id).await?;
 
     let part = manifest
@@ -267,21 +263,16 @@ async fn cmd_extract(
         .first()
         .ok_or_else(|| anyhow::anyhow!("No files in part '{}'", part_name))?;
 
-    let raw_url = first_file
+    let url = first_file
         .download_url
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("No download URL for this part"))?;
-
-    let url = match mirror_host {
-        Some(host) => apply_mirror(raw_url, host),
-        None => raw_url.to_string(),
-    };
 
     println!("Archive: {} ({})", first_file.basename, fmt_size(first_file.size));
     println!("URL: {}", url);
     println!("Reading archive index via range requests...");
 
-    let mut rf = RemoteFile::new(&url).context("Failed to open remote file")?;
+    let mut rf = RemoteFile::new(url).context("Failed to open remote file")?;
     let entries = parse_archive_index(&mut rf)?;
     let files_only: Vec<_> = entries.iter().filter(|e| e.compressed_size > 0).collect();
 

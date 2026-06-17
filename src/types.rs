@@ -9,11 +9,15 @@ pub enum Backend {
 }
 
 impl Backend {
-    pub fn showroom_url(self) -> &'static str {
-        match self {
-            Backend::Wgc => "https://wguscs-wgceu.wargaming.net/api/v20/content/showroom/?lang=EN&gameid=WGC.EU.PRODUCTION&format=json&wgc_publisher_id=wargaming&country_code=US",
-            Backend::Lgc => "https://lstuscs-ru.lesta.ru/api/v21/content/showroom/?lang=RU&gameid=LGC.RU.PRODUCTION&format=json&gc_publisher_id=lesta&country_code=RU",
-            Backend::Cn360 => "https://wguscs-cn360.wggames.cn/api/v20/content/showroom/?lang=ZH_CN&gameid=WGC360.CN.PRODUCTION&format=json&wgc_publisher_id=qihoo&country_code=CN",
+    pub fn showroom_url(self, mirror: Option<&str>) -> &'static str {
+        match (self, mirror) {
+            (Backend::Wgc, Some("asia")) => "https://wguscs-wgcasia.wargaming.net/api/v20/content/showroom/?lang=EN&gameid=WGC.ASIA.PRODUCTION&format=json&wgc_publisher_id=wargaming&country_code=SG",
+            (Backend::Wgc, Some("na")) => "https://wguscs-wgcna.wargaming.net/api/v20/content/showroom/?lang=EN&gameid=WGC.NA.PRODUCTION&format=json&wgc_publisher_id=wargaming&country_code=US",
+            _ => match self {
+                Backend::Wgc => "https://wguscs-wgceu.wargaming.net/api/v20/content/showroom/?lang=EN&gameid=WGC.EU.PRODUCTION&format=json&wgc_publisher_id=wargaming&country_code=US",
+                Backend::Lgc => "https://lstuscs-ru.lesta.ru/api/v21/content/showroom/?lang=RU&gameid=LGC.RU.PRODUCTION&format=json&gc_publisher_id=lesta&country_code=RU",
+                Backend::Cn360 => "https://wguscs-cn360.wggames.cn/api/v20/content/showroom/?lang=ZH_CN&gameid=WGC360.CN.PRODUCTION&format=json&wgc_publisher_id=qihoo&country_code=CN",
+            },
         }
     }
 
@@ -29,28 +33,24 @@ impl Backend {
         match self { Backend::Wgc => "wgc_publisher_id", Backend::Lgc => "gc_publisher_id", Backend::Cn360 => "wgc_publisher_id" }
     }
 
-    pub fn mirrors(self) -> &'static [(&'static str, &'static str)] {
+    pub fn mirrors(self) -> &'static [&'static str] {
         match self {
-            Backend::Wgc => &[
-                ("asia", "wguscs-wgcasia.wargaming.net"),
-                ("na",   "wguscs-wgcna.wargaming.net"),
-            ],
+            Backend::Wgc => &["asia", "na"],
             Backend::Lgc => &[],
             Backend::Cn360 => &[],
         }
     }
 
-    pub fn resolve_mirror(self, name: &str) -> Result<&'static str, String> {
-        for (n, host) in self.mirrors() {
-            if name.eq_ignore_ascii_case(n) {
-                return Ok(host);
-            }
-        }
-        let available: Vec<&str> = self.mirrors().iter().map(|(n, _)| *n).collect();
-        if available.is_empty() {
-            Err(format!("Backend '{:?}' has no mirrors available", self))
+    pub fn resolve_mirror(self, name: &str) -> Result<(), String> {
+        if self.mirrors().iter().any(|n| name.eq_ignore_ascii_case(n)) {
+            Ok(())
         } else {
-            Err(format!("Unknown mirror '{}'. Available mirrors for '{:?}': {}", name, self, available.join(", ")))
+            let available = self.mirrors();
+            if available.is_empty() {
+                Err(format!("Backend '{:?}' has no mirrors available", self))
+            } else {
+                Err(format!("Unknown mirror '{}'. Available mirrors for '{:?}': {}", name, self, available.join(", ")))
+            }
         }
     }
 }

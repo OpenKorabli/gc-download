@@ -17,8 +17,8 @@ fn client() -> reqwest::Client {
         .expect("Failed to build HTTP client")
 }
 
-pub async fn fetch_showroom(backend: Backend) -> anyhow::Result<Vec<Game>> {
-    let resp = client().get(backend.showroom_url()).send().await?;
+pub async fn fetch_showroom(backend: Backend, mirror: Option<&str>) -> anyhow::Result<Vec<Game>> {
+    let resp = client().get(backend.showroom_url(mirror)).send().await?;
     let sr: ShowroomResponse = resp.json().await?;
     let mut games = Vec::new();
     for entry in sr.data.showcase {
@@ -40,8 +40,8 @@ pub async fn fetch_showroom(backend: Backend) -> anyhow::Result<Vec<Game>> {
     Ok(games)
 }
 
-pub async fn resolve_game(backend: Backend, app_id: &str) -> anyhow::Result<Game> {
-    let games = fetch_showroom(backend).await?;
+pub async fn resolve_game(backend: Backend, app_id: &str, mirror: Option<&str>) -> anyhow::Result<Game> {
+    let games = fetch_showroom(backend, mirror).await?;
     for g in &games {
         if g.app_id.eq_ignore_ascii_case(app_id) {
             return Ok(g.clone());
@@ -133,12 +133,6 @@ fn get_part_ids(client_types: &roxmltree::Node, default_ct: &str) -> anyhow::Res
         }
     }
     anyhow::bail!("No client_parts found for client_type '{}'", default_ct)
-}
-
-pub fn apply_mirror(url: &str, mirror_host: &str) -> String {
-    let mut u = url::Url::parse(url).expect("apply_mirror: invalid URL");
-    u.set_host(Some(mirror_host)).ok();
-    u.to_string()
 }
 
 fn build_direct_url(torrent_url: &str, file_name: &str) -> Option<String> {

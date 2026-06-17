@@ -1,6 +1,6 @@
 [package]
 name = "gc-download"
-version = "0.1.2"
+version = "0.1.3"
 description = "Download and extract game files from Wargaming Game Center (WGC) and Lesta Game Center (LGC)"
 edition = "2021"
 license = "GPL-3.0-only"
