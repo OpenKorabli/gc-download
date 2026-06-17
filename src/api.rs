@@ -135,6 +135,12 @@ fn get_part_ids(client_types: &roxmltree::Node, default_ct: &str) -> anyhow::Res
     anyhow::bail!("No client_parts found for client_type '{}'", default_ct)
 }
 
+pub fn apply_mirror(url: &str, mirror_host: &str) -> String {
+    let mut u = url::Url::parse(url).expect("apply_mirror: invalid URL");
+    u.set_host(Some(mirror_host)).ok();
+    u.to_string()
+}
+
 fn build_direct_url(torrent_url: &str, file_name: &str) -> Option<String> {
     if torrent_url.is_empty() || file_name.is_empty() {
         return None;

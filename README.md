@@ -118,6 +118,14 @@ $ gc-download extract MK.RU.PRODUCTION locale --filter '*.xml' -d out/
 
 Specify a backend with `-b` (default is `lgc`). Available: `wgc`, `lgc`, `cn360`.
 
+Select a CDN mirror with `-m` (WGC only):
+- `asia` — `wguscs-wgcasia.wargaming.net`
+- `na` — `wguscs-wgcna.wargaming.net`
+
+```
+$ gc-download -b wgc -m asia download WOT.ASIA.PRODUCTION locale --all
+```
+
 ## Installation
 
 ```bash

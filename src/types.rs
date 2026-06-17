@@ -28,6 +28,31 @@ impl Backend {
     pub fn gc_publisher_param(self) -> &'static str {
         match self { Backend::Wgc => "wgc_publisher_id", Backend::Lgc => "gc_publisher_id", Backend::Cn360 => "wgc_publisher_id" }
     }
+
+    pub fn mirrors(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            Backend::Wgc => &[
+                ("asia", "wguscs-wgcasia.wargaming.net"),
+                ("na",   "wguscs-wgcna.wargaming.net"),
+            ],
+            Backend::Lgc => &[],
+            Backend::Cn360 => &[],
+        }
+    }
+
+    pub fn resolve_mirror(self, name: &str) -> Result<&'static str, String> {
+        for (n, host) in self.mirrors() {
+            if name.eq_ignore_ascii_case(n) {
+                return Ok(host);
+            }
+        }
+        let available: Vec<&str> = self.mirrors().iter().map(|(n, _)| *n).collect();
+        if available.is_empty() {
+            Err(format!("Backend '{:?}' has no mirrors available", self))
+        } else {
+            Err(format!("Unknown mirror '{}'. Available mirrors for '{:?}': {}", name, self, available.join(", ")))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
